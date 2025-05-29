@@ -1,0 +1,664 @@
+---
+title: "STAT463 Finalized Group Project Code"
+author: "Dylan Nguyen G01380592"
+date: "2025-04-25"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+Description of Big Mart Sales Dataset:
+
+PREDICTORS: 
+ProductID : unique product ID
+Weight : weight of products
+FatContent : specifies whether the product is low on fat or not
+Visibility : percentage of total display area of all products in a store allocated to the particular product
+ProductType : the category to which the product belongs
+MRP : Maximum Retail Price (listed price) of the products
+OutletID : unique store ID
+EstablishmentYear : year of establishment of the outlets
+OutletSize : the size of the store in terms of ground area covered
+LocationType : the type of city in which the store is located
+OutletType : specifies whether the outlet is just a grocery store or some sort of supermarket
+
+
+
+TARGET/RESPONSE VARIABLE: 
+OutletSales : (target variable) total sales of each product in the particular store
+
+
+
+
+Contruction Phase: We imported the dataset, then split the data into test and train sets. Imputation: We Removed NA values. We removed missing values as we assume the key stakeholders are okay with this decision.
+```{r import and make train/test sets}
+library(dplyr)
+## import sets and clean up data
+imported_train <- read.csv("Train-Set.csv")
+imported_train <- imported_train[,-1]
+imported_train <- imported_train[,-6]
+
+
+# train and test sets (validation set approach with 70%/30% split)
+set.seed(16)
+train_indices <- sample(nrow(imported_train),size=nrow(imported_train)*.7)
+train_set <- imported_train[train_indices,]
+test_set <- imported_train[-train_indices,]
+
+# remove NA values - imputation
+train_set <- train_set %>%
+  filter(!is.na(Weight))
+test_set <- test_set %>%
+  filter(!is.na(Weight))
+
+```
+
+
+Contruction Phase: We made the data numeric for the given variables: Weight, ProductVisibility, MRP, EstablishmentYear, and OutletSales. This ensures the regression properly uses the correct data type (numeric) when fitting the data.
+```{r make data numeric}
+train_set$Weight <- as.numeric(train_set$Weight)
+train_set$ProductVisibility <- as.numeric(train_set$ProductVisibility)
+train_set$MRP <- as.numeric(train_set$MRP)
+train_set$EstablishmentYear <- as.numeric(train_set$EstablishmentYear)
+train_set$OutletSales <- as.numeric(train_set$OutletSales)
+
+test_set$Weight <- as.numeric(test_set$Weight)
+test_set$ProductVisibility <- as.numeric(test_set$ProductVisibility)
+test_set$MRP <- as.numeric(test_set$MRP) 
+test_set$EstablishmentYear <- as.numeric(test_set$EstablishmentYear)
+test_set$OutletSales <- as.numeric(test_set$OutletSales)
+```
+
+
+Contruction Phase: We refactored (encode) categorical variables. This ensures that the categorical variables are properly processed to be run for our analysis. We do not want categorical variables to have improper levels or incorrect data types.
+```{r refactor data}
+# For train_set
+train_set <- train_set %>%
+  mutate(FatContent = recode_factor(FatContent, 'LF' = 'Low Fat', 'low fat' = 'Low Fat', 'reg' = 'Regular')) %>%
+  mutate(ProductType = recode_factor(ProductType,
+                                     'Baking Goods' = 'Baking Goods',
+                                     'Fruits and Vegetables' = 'Fruits and Vegetables',
+                                     'Household' = 'Household',
+                                     'Dairy' = 'Dairy',
+                                     'Hard Drinks' = 'Hard Drinks',
+                                     'Frozen Foods' = 'Frozen Foods',
+                                     'Snack Foods' = 'Snack Foods',
+                                     'Canned' = 'Canned',
+                                     'Meat' = 'Meat',
+                                     'Health and Hygiene' = 'Health and Hygiene',
+                                     'Soft Drinks' = 'Soft Drinks',
+                                     'Starchy Foods' = 'Starchy Foods',
+                                     'Breakfast' = 'Breakfast',
+                                     'Others' = 'Others',
+                                     'Breads' = 'Breads',
+                                     'Seafood' = 'Seafood')) %>%
+  mutate(OutletSize = recode_factor(OutletSize, 'Small' = 'Small', 'Medium' = 'Medium', 'High' = 'High')) %>%
+  mutate(LocationType = recode_factor(LocationType, 'Tier 1' = 'Tier 1', 'Tier 2' = 'Tier 2', 'Tier 3' = 'Tier 3')) %>%
+  mutate(OutletType = recode_factor(OutletType,
+                                    'Supermarket Type1' = 'Supermarket Type1',
+                                    'Grocery Store' = 'Grocery Store',
+                                    'Supermarket Type2' = 'Supermarket Type2',
+                                    'Supermarket Type3' = 'Supermarket Type3'))
+
+# For test_set
+test_set <- test_set %>%
+  mutate(FatContent = recode_factor(FatContent, 'LF' = 'Low Fat', 'low fat' = 'Low Fat', 'reg' = 'Regular')) %>%
+  mutate(ProductType = recode_factor(ProductType,
+                                     'Baking Goods' = 'Baking Goods',
+                                     'Fruits and Vegetables' = 'Fruits and Vegetables',
+                                     'Household' = 'Household',
+                                     'Dairy' = 'Dairy',
+                                     'Hard Drinks' = 'Hard Drinks',
+                                     'Frozen Foods' = 'Frozen Foods',
+                                     'Snack Foods' = 'Snack Foods',
+                                     'Canned' = 'Canned',
+                                     'Meat' = 'Meat',
+                                     'Health and Hygiene' = 'Health and Hygiene',
+                                     'Soft Drinks' = 'Soft Drinks',
+                                     'Starchy Foods' = 'Starchy Foods',
+                                     'Breakfast' = 'Breakfast',
+                                     'Others' = 'Others',
+                                     'Breads' = 'Breads',
+                                     'Seafood' = 'Seafood')) %>%
+  mutate(OutletSize = recode_factor(OutletSize, 'Small' = 'Small', 'Medium' = 'Medium', 'High' = 'High')) %>%
+  mutate(LocationType = recode_factor(LocationType, 'Tier 1' = 'Tier 1', 'Tier 2' = 'Tier 2', 'Tier 3' = 'Tier 3')) %>%
+  mutate(OutletType = recode_factor(OutletType,
+                                    'Supermarket Type1' = 'Supermarket Type1',
+                                    'Grocery Store' = 'Grocery Store',
+                                    'Supermarket Type2' = 'Supermarket Type2',
+                                    'Supermarket Type3' = 'Supermarket Type3'))
+
+```
+
+
+
+Exploratory phase: We created a scatter plot matrix and other explorations between predictors and response in order to see the general relationships that we may want to explore later with regression analysis.
+```{r explore scatterplot matrix}
+library(ggplot2)
+library(GGally)
+library(dplyr)
+
+plot_data <- train_set %>%
+  dplyr::select(
+    OutletSales,
+    Weight, 
+    MRP, 
+    ProductVisibility, 
+    EstablishmentYear,
+    FatContent, 
+    ProductType, 
+    OutletSize, 
+    LocationType, 
+    OutletType
+  ) %>%
+  mutate(across(where(is.factor), as.factor))
+
+# numeric predictors
+ggpairs(
+  data = plot_data,
+  columns = c("OutletSales", "Weight", "MRP", "ProductVisibility", "EstablishmentYear"),
+  lower = list(continuous = wrap("smooth", method = "lm")),
+  diag = list(continuous = wrap("densityDiag", alpha = 0.5)),
+  upper = list(continuous = wrap("cor", size = 3))
+)
+
+ggplot(train_set, aes(x = MRP, y = OutletSales)) + 
+  geom_point() + 
+  labs(title = "Outlet Sales (in thousands) by MRP (in dollars)", x="MRP (in dollars)")
+
+ggplot(train_set, aes(x = ProductVisibility, y = OutletSales)) + 
+  geom_point() + 
+  labs(title = "Outlet Sales by ProductVisibility (proportion against all items on shelves)", x="ProductVisibility (proportion against all items on shelves)")
+
+ggplot(train_set, aes(x = OutletSize, y = OutletSales)) + geom_boxplot(fill='green') +
+  labs(title = "OutletSales (in thousands) by OutletSize")
+
+ggplot(train_set, aes(x = LocationType, y = OutletSales)) + geom_boxplot(fill='yellow') +
+  labs(title = "OutletSales (in thousands) by LocationType")
+
+# establishmentyear box plot
+ggplot(train_set, aes(EstablishmentYear, OutletSales)) +
+  geom_point(fill = "blue") + geom_smooth(method = "loess")
+  labs(title = "OutletSales (in thousands) by EstablishmentYear (by year)")
+
+# outlet type box plot
+ggplot(train_set, aes(OutletType, OutletSales)) +
+  geom_boxplot(fill = "blue") +
+  labs(title = "OutletSales (in thousands) by OutletType")
+
+# product type box plot
+ggplot(train_set, aes(ProductType, OutletSales)) +
+  geom_boxplot(fill = "red") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "OutletSales (in thousands) by ProductType")
+
+# weight scatter plot plot
+ggplot(train_set, aes(x = Weight, y = OutletSales)) + geom_point() +
+  labs(title = "OutletSales (in thousands) by Weight (unknown units)")
+
+# fat content box plot
+ggplot(train_set, aes(x = FatContent, y = OutletSales)) + geom_boxplot(fill='pink') +
+  labs(title = "OutletSales (in thousands) by FatContent")
+
+
+```
+
+
+Exploratory phase: Created a Correlation Matrix to assess and deal with potential multicollinearity. (~0.5 correlation which isn't enough to warrant anything huge.)
+```{r correlation plot to explore predictor multicollinearity}
+library(dplyr) 
+library(corrplot)
+
+vars_numeric <- train_set %>%
+  mutate(across(where(is.factor), ~ as.numeric(factor(.)))) %>%
+  dplyr::select(where(is.numeric))
+
+
+corr_matrix <- cor(vars_numeric, use = "complete.obs")
+corrplot(corr_matrix, method = "circle", type = "upper", diag = FALSE)
+
+```
+
+
+Analysis Phase: Check multicollinearity for all transformations and features (lasso regression with CV, polynomial transformed predictors, log transformed response) before fitting in order to ensure that predictors are effectively "doing their own job" or contributing to the model in their own way.
+```{r VIF multicollinearity check (FOR FINAL MODEL): good - VIF is less than 3 for all features}
+
+model_matrix <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=train_set)[, -1]
+
+train_y <- log(train_set$OutletSales)
+
+library(car)
+linear_model <- lm(train_y ~ model_matrix)
+
+# ordinary least squares VIF
+library(olsrr)
+vif_results <- ols_vif_tol(linear_model)
+print(vif_results)
+
+```
+
+
+
+
+
+ALL MODELS WE EXAMINED. This includes (in order)
+
+- Linear Regression
+- Lasso CV model
+- Lasso CV model with log transformed response
+- Lasso CV model with log transformed response + polynomial transformations (final model explained above)
+- Random Forest Regression (log and polynomial transformations)
+- Gradient Boosting Regression (log and polynomial transformations)
+
+
+
+Analysis Phase: We start by demonstrating our final model, then moving onto the other models we previously tested.
+
+We created our final model which is a lasso regression (called lasso regression v3, our 3rd lasso model) which uses all predictors. It uses cross validation, a log transformed response, and polynomial transformed predictors (MRP and Establishment Year).
+
+
+Final Model: Prepare Dataset for our fourth and FINAL MODEL. 
+```{r FINAL MODEL lasso regression v3: data preparation}
+
+library(glmnet)
+
+# Prepare the data
+train_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=train_set)[, -1]  # Exclude the intercept column
+train_y <- log(train_set$OutletSales)
+test_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=test_set)[, -1]
+test_y <- log(test_set$OutletSales)
+
+```
+
+Final Model: Fit the final model and get predictions using the optimal lambda.
+```{r FINAL MODEL lasso regression v3: fit final model and get predictions}
+
+# lasso regression 5-fold cross-validation
+set.seed(123)  # For reproducibility
+cv_lasso <- cv.glmnet(train_x, train_y, alpha = 1, nfolds = 5)
+
+# print the best lambda achieved using CV
+cat("Best Lambda (from CV):", cv_lasso$lambda.min, "\n")
+
+# predict lasso model values using optimal lambda
+lasso_preds_cv <- predict(cv_lasso, s = "lambda.min", newx = test_x)
+lasso_preds_cv <- lasso_preds_cv[, 1]
+
+```
+
+Final Model: Print best coefficients used for interpretation, then the cross validation plot with number of features, train MSE, and lambda tuning parameter.
+```{r FINAL MODEL lasso regression v3: print best coefficients and cross validation plot}
+# best coefs
+lasso_coef <- coef(cv_lasso, s = "lambda.min")
+print(lasso_coef)
+
+non_zero_coefs <- lasso_coef[lasso_coef != 0]
+
+
+# plot cross validation plot with lambda tuning parameter
+plot(cv_lasso, xvar = "lambda", label = TRUE)
+```
+
+Residuals vs Predicted values, plotted using ggplot: with a normal qqplot style.
+```{r FINAL MODEL lasso regression v3: normal QQ plot}
+
+# do Normal QQ Plot style ggplot
+
+# create predicted vs actual fit
+predicted_vs_actual <- data.frame(
+  Predicted = as.numeric(lasso_preds_cv),
+  Actual = as.numeric(test_y)
+)
+
+# test MSE for residuals
+test_MSE_lasso_cv <- mean((lasso_preds_cv - test_y)^2)
+
+# create the plot with enhancements
+ggplot(predicted_vs_actual, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "LASSO (Log Resp. + Poly Predictor Transf.): Preds vs Actual OutletSales",
+    subtitle = paste("RMSE =", round(sqrt(test_MSE_lasso_cv), 2)),
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+```
+
+Residuals vs Predicted values, plotted using ggplot: with an equal variance plot style.
+```{r FINAL MODEL lasso regression v3: residuals plot for equal variance checking}
+
+# residuals (equal variance checking)
+test_MSE_lasso_cv <- mean((lasso_preds_cv - test_y)^2)
+residuals <- lasso_preds_cv - test_y
+
+residuals_plot <- data.frame(
+  Fitted = as.numeric(lasso_preds_cv),
+  Residuals = as.numeric(residuals)
+)
+
+ggplot(residuals_plot, aes(x = Fitted, y = Residuals)) +
+  geom_point(alpha = 0.6, color = "darkgreen") +
+  geom_smooth(method = "loess", se = FALSE, color = "blue", linewidth = 1) +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(
+    title = "Residuals vs Fitted Values",
+    subtitle = "Checking for Equal Variance (Homoscedasticity)",
+    x = "Fitted Values (Log OutletSales)",
+    y = "Residuals"
+  )
+
+```
+
+Compute the Test R^2 for final model:
+```{r FINAL MODEL lasso regression v3: Test R^2}
+# R^2
+RMSE <- sqrt(mean((lasso_preds_cv - test_y)^2))
+RSS <- sum((lasso_preds_cv - test_y)^2)
+TSS <- sum((test_y - mean(test_y))^2)
+r2 <- 1 - (RSS / TSS)
+
+cat("\n\nRMSE:", RMSE, "\n")
+cat("TEST R-squared:", r2, "\n")
+
+preds_exp <- exp(lasso_preds_cv)
+actuals_exp <- exp(test_y)
+
+```
+
+
+Above is our final model that we came up with after a few iterations.
+
+****IMPORTANT****
+
+Below are the iterations of different regressions we tried, not including our chosen model.
+
+
+Our first model: linear regression
+```{r v1 linear regression - not as good}
+library(car)
+library(caret)
+library(boot)
+
+# linear regression
+lm.fit.v1 <- lm(OutletSales ~ ., data=train_set, na.action = na.omit)
+
+preds <- predict(lm.fit.v1, newdata = test_set, na.action = na.omit)
+
+test_y <- test_set$OutletSales
+
+# test MSE, RMSE calcluations
+test_MSE <- mean((preds - test_y)^2)
+cat("Lin Reg MSE:",test_MSE,"\n")
+cat("Lin Reg RMSE:",sqrt(test_MSE))
+
+# R^2 calculation
+RSS <- sum((preds - test_y)^2)
+TSS <- sum((test_y - mean(test_y))^2)
+r2 <- 1 - (RSS / TSS)
+cat("\nLin Reg R-squared:", r2, "\n")
+
+
+# residuals
+# create predicted vs actual dataframe to plot residuals for LINEAR MODEL
+predicted_vs_actual_linear <- data.frame(
+  Predicted = as.numeric(preds),
+  Actual = as.numeric(test_y)
+)
+
+# plot
+ggplot(predicted_vs_actual_linear, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "Linear Regression: Predicted vs Actual OutletSales",
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+```
+
+
+Our second model (first lasso model): cross validated lasso regression with no transformations.
+```{r lasso reg v1 all predictors CROSS VALIDATION - no transformations - solid}
+
+library(glmnet)
+
+# Prepare the data
+train_x <- model.matrix(OutletSales ~ ., data=train_set)[, -1]
+train_y <- train_set$OutletSales
+test_x <- model.matrix(OutletSales ~ ., data=test_set)[, -1]
+test_y <- test_set$OutletSales
+
+
+# fit lasso regression
+set.seed(123)  # for reproducibility
+cv_lasso <- cv.glmnet(train_x, train_y, alpha = 1, nfolds = 5)
+
+
+# using cross validation, use optimal lambda to predict values
+lasso_preds_cv <- predict(cv_lasso, s = "lambda.min", newx = test_x)
+lasso_preds_cv <- lasso_preds_cv[, 1]
+
+
+
+# test MSE for this model
+test_MSE_lasso_cv <- mean((lasso_preds_cv - test_y)^2)
+
+# r^2 for this model
+RMSE <- sqrt(mean((lasso_preds_cv - test_y)^2))
+RSS <- sum((lasso_preds_cv - test_y)^2)
+TSS <- sum((test_y - mean(test_y))^2)
+r2 <- 1 - (RSS / TSS)
+
+cat("\n TEST RMSE:", RMSE, "\n")
+cat("TEST R-squared:", r2, "\n")
+
+
+# residuals
+# create predicted vs actual dataframe to plot residuals for Lasso CV
+predicted_vs_actual_lasso_basic <- data.frame(
+  Predicted = as.numeric(lasso_preds_cv),
+  Actual = as.numeric(test_y)
+)
+
+# plot
+ggplot(predicted_vs_actual_lasso_basic, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "CV Lasso Regression (no transformations): Predicted vs Actual OutletSales",
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+
+```
+
+
+Our third model (second lasso model): cross validated lasso regression with a log transformed response.
+```{r lasso reg v2, all predictors, log transformed response, }
+
+
+library(glmnet)
+
+# log transform the response
+train_y_log <- log(train_set$OutletSales)
+test_y_log <- log(test_set$OutletSales)
+
+# design matrices to be used in the lasso regression
+train_x <- model.matrix(OutletSales ~ ., data=train_set)[, -1]
+test_x <- model.matrix(OutletSales ~ ., data=test_set)[, -1]
+
+# cross validated lasso regression
+set.seed(123)
+cv_lasso <- cv.glmnet(train_x, train_y_log, alpha = 1)
+
+# calculate best lambda
+best_lambda <- cv_lasso$lambda.min
+
+# compute predictions for this lasso model
+lasso_preds_log <- predict(cv_lasso, s = best_lambda, newx = test_x)
+
+# test MSE and RMSE for log transformed response in lasso
+test_MSE_log <- mean((lasso_preds_log - test_y_log)^2)
+test_RMSE_log <- sqrt(test_MSE_log)
+
+# calculate R^2
+RSS_log <- sum((lasso_preds_log - test_y_log)^2)
+TSS_log <- sum((test_y_log - mean(test_y_log))^2)
+r2_log <- 1 - (RSS_log / TSS_log)
+
+# print MSE, RMSE, R^2 for the TEST data
+cat("Lasso Reg (log transformed response) TEST RMSE (Log Scale, CV):", test_RMSE_log, "\n")
+cat("Lasso Reg (log transformed response) TEST R^2 (Log Scale, CV):", r2_log, "\n")
+
+
+# residuals
+# create predicted vs actual dataframe to plot residuals for Lasso CV (LOG TRANSF)
+predicted_vs_actual_lasso_log <- data.frame(
+  Predicted = as.numeric(lasso_preds_log),
+  Actual = as.numeric(test_y_log)
+)
+
+# plot
+ggplot(predicted_vs_actual_lasso_log, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "CV Lasso Regression (Log Transf. Response): Predicted vs Actual OutletSales",
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+
+```
+Random Forest model: This is our attempt at random forest regression, which is too computationally expensive to put into production, as well as suffering from non-interpretability.
+```{r}
+
+library(randomForest)
+
+# prepare data
+train_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=train_set)[, -1]  # exclude the intercept column
+train_y <- log(train_set$OutletSales)
+test_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=test_set)[, -1]
+test_y <- log(test_set$OutletSales)
+
+# fit RF model
+set.seed(123)  # for reproducibility
+rf_model <- randomForest(x = train_x, y = train_y, ntree = 500)
+
+# Predict
+rf_preds <- predict(rf_model, newdata = test_x)
+
+# MSE & RMSE calculation
+test_MSE_rf <- mean((rf_preds - test_y)^2)
+cat("Random Forest MSE:", test_MSE_rf, "\n")
+cat("Random Forest RMSE:", sqrt(test_MSE_rf), "\n")
+
+
+# create predicted vs actual dataframe to plot residuals for RF
+predicted_vs_actual_rf <- data.frame(
+  Predicted = as.numeric(rf_preds),
+  Actual = as.numeric(test_y)
+)
+
+# plot
+ggplot(predicted_vs_actual_rf, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "Random Forest Regression: Predicted vs Actual OutletSales",
+    subtitle = paste("RMSE =", round(sqrt(test_MSE_rf), 2)),
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+# RMSE, R^2
+RMSE_rf <- sqrt(mean((rf_preds - test_y)^2))
+RSS_rf <- sum((rf_preds - test_y)^2)
+TSS_rf <- sum((test_y - mean(test_y))^2)
+r2_rf <- 1 - (RSS_rf / TSS_rf)
+
+cat("Random Forest RMSE:", RMSE_rf, "\n")
+cat("Random Forest R-squared:", r2_rf, "\n")
+
+```
+
+Gradient Boosting Regression: This is our attempt at gradient boosting regression. One thing to note is that it also suffers from interpretation, and is difficult for key stakeholders to understand.
+```{r}
+library(xgboost)
+
+# prepare data
+train_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=train_set)[, -1]  # exclude the intercept column
+train_y <- log(train_set$OutletSales)
+test_x <- model.matrix(OutletSales ~ . + poly(MRP, 6) + poly(EstablishmentYear,3), data=test_set)[, -1]
+test_y <- log(test_set$OutletSales)
+train_matrix <- xgb.DMatrix(data = train_x, label = train_y)
+test_matrix <- xgb.DMatrix(data = test_x, label = test_y)
+
+
+params <- list(
+  objective = "reg:squarederror",
+  eval_metric = "rmse",
+  max_depth = 6,
+  eta = 0.01, # LEARNING RATE
+  nthread = 2
+)
+
+# train gradient boosting model
+set.seed(123)  # reproducibility
+gb_model <- xgb.train(
+  params = params,
+  data = train_matrix,
+  nrounds = 500,  # number of boosting rounds
+  watchlist = list(train = train_matrix, test = test_matrix),
+  early_stopping_rounds = 50 # stop if didn't improve over number of rds
+)
+
+# preds
+gb_preds <- predict(gb_model, newdata = test_matrix)
+
+# calc MSE and RMSE for the Gradient Boosting model
+test_MSE_gb <- mean((gb_preds - test_y)^2)
+
+cat("Gradient Boosting MSE:", test_MSE_gb, "\n")
+cat("Gradient Boosting RMSE:", sqrt(test_MSE_gb), "\n")
+
+# create predicted vs actual dataframe for plotting
+predicted_vs_actual_gb <- data.frame(
+  Predicted = as.numeric(gb_preds),
+  Actual = as.numeric(test_y)
+)
+
+# create plot
+ggplot(predicted_vs_actual_gb, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", alpha = 0.6) +
+  geom_abline(intercept = 0, slope = 1, color = "red") +
+  labs(
+    title = "Gradient Boosting Regression: Predicted vs Actual OutletSales",
+    subtitle = paste("RMSE =", round(sqrt(test_MSE_gb), 2)),
+    x = "Actual OutletSales",
+    y = "Predicted OutletSales"
+  )
+
+# RMSE and R^2
+RMSE_gb <- sqrt(mean((gb_preds - test_y)^2))
+RSS_gb <- sum((gb_preds - test_y)^2)
+TSS_gb <- sum((test_y - mean(test_y))^2)
+r2_gb <- 1 - (RSS_gb / TSS_gb)
+
+cat("Gradient Boosting RMSE:", RMSE_gb, "\n")
+cat("Gradient Boosting R-squared:", r2_gb, "\n")
+
+```
+
+
+
+
+
