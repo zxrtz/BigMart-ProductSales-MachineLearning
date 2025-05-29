@@ -1,12 +1,13 @@
 # Big Mart Product Sales - Predictive Machine Learning Model
 ### R Studio Data Analysis - Analyzing in-Store Metrics to Predict Product Sales
 
-This project aimed to **successfully predict product sales** using in store specifications such as: product visibility, maximal retail price, product type, etc.
+### This project aimed to **successfully predict product sales** using in store specifications such as: product visibility, maximal retail price, product type, etc.
 To do this, I:
 - Collaborated with a team to explore different modern regression models.
 - Delivered the identification of the certain predictors that would be able to predict total sales per product
 
 As a result, **we fitted the commonly known linear regression**, achieving an interpretable, robust model to predict total sales per product.
+
 Below are the predictors that were significant, along with most important recommendations to key stakeholders.
 
 ![image](https://github.com/user-attachments/assets/6f0801f8-05db-43f3-ab95-4edc48ed3d7a)
