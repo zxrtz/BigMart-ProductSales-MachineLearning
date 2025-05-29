@@ -6,7 +6,7 @@ To do this, I:
 - Collaborated with a team to explore different modern regression models.
 - Delivered the identification of the certain predictors that would be able to predict total sales per product
 
-#### As a result, **we fitted the commonly known linear regression**, achieving an interpretable, robust model to predict total sales per product.
+### As a result, **we fitted the commonly known linear regression**, achieving an interpretable, robust model to predict total sales per product.
 
 Below are the predictors that were significant, along with most important recommendations to key stakeholders.
 
